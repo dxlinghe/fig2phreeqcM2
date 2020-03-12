@@ -1,0 +1,38 @@
+EXCHANGE_MASTER_SPECIES
+Y Y-
+EXCHANGE_SPECIES
+Y- = Y-
+	-log_k 0.0
+Na+ + Y- = NaY
+	-log_k 0 
+-gamma  4.08 0.082
+K+ + Y- = KY
+	-log_k  0
+-gamma  4.08 0.082
+
+SOLUTION 0 NaCl 
+        units            mmol/kgw
+        temp             25.0
+	Na	1
+	Cl	1
+END
+SOLUTION 1-161  Initial solution for column
+        units            mmol/kgw
+        temp             25.0
+	K       0.667  # in order to make Na retaradtion factor 2.5 = 1 + NaX/C_Na, the Nax/C_Na = 1.5, because log_k for Na and K is the same, NaK/C_K should also be 1.5.	
+	N(5)	0.667
+EXCHANGE 1-161
+        equilibrate 1
+        Y       0.001
+END
+
+# The number of SOLUTION in the column is from solution 1 to solution 160, 161 is dummy solution for the purpose of closed boundary condition and also for parallel computing
+
+
+SELECTED_OUTPUT
+-reset false
+USER_PUNCH
+-Headings H O charge Na Cl K N(5)
+10 PUNCH TOTMOLE("H"), TOTMOLE("O")
+20 PUNCH charge_balance
+30 PUNCH TOTMOLE("Na"), TOTMOLE("Cl"), TOTMOLE("K"), TOTMOLE("N(5)")
