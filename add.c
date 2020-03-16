@@ -9,7 +9,7 @@ alpha = 0.5, central in space
 #include <IPhreeqc.h>
 #include <mpi.h>
 #include <math.h>
-#define Nel 7  // number of transported element + H + O + chargebalance
+#define Nel 7  // number of transported getcomponentcount + H + O + chargebalance
 #define Ncel 80 // solution number (40) 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 int id;
@@ -19,17 +19,6 @@ double dv[Nel], cv[Nel];  //dv totoal mol, cv concentration
 char dsv[Nel][100];
 char sv[Nel][100];
 char buffer[100];
-//double por[7];
-//double diff[7];
-//double r_in[7];
-//double r_out[7];
-//double area_in[7];
-//double area_out[7];
-//double vol[7];
-//double mix[7][2];
-//bool radial;
-//radial = 0;  // 0 for cartisian coordinate and 1 for radial coordinate 
-
 void Extract(int cell)
 {
 
@@ -57,10 +46,7 @@ void Extract(int cell)
                 }
 
                 VarClear(&v);
-
-
 }
-
 
 char *ConCat(const char *str1, const char *str2)
 {
@@ -78,14 +64,14 @@ int main()
 	double radius_out = 130; //vitrified HLW outer_radius of buffer 
 	double radius_in = 0.0;//vitrified HLW outer_radius of overpack
 	int outlet_bc = 1, inlet_bc = 1; // 1 const, 2 impossilble, 3 flux
-	int coord_sys = 1; // 1 = cartesian, 2 = radial
+	int coord_sys = 1; // 1 = cartesian, 2 = radial (not applicable at the moment)
 	double tot_time = 4 * 86400 * 365; // total simulation time, 4 years
 	double por_v = 15.0 / (86400 * 365); // pore velocity
 	//double lenCel = (radius_out - radius_in)/nCel;
 	double vol_whole;//, vol_temp;
 	double fbc = 1.;
 	double deltaT = (radius_out - radius_in) / (Ncel * por_v); // curant number: deltaX = deltaT * por_v to minimize numerical dispersion
-	double length = 1.;
+	double length = 1.; // only important for radial diffusion case
 	double alpha = 0;
 
 	double disp_corr = 1;
@@ -107,6 +93,13 @@ int main()
 	MPI_Comm_size(MPI_COMM_WORLD,&size);
 	MPI_Status status;
 	//starttime = MPI_Wtime();
+	if (coord_sys != 1)
+		{
+			if (mynode == 0)
+				fprintf(stderr,"Radial flow is not implemented in the current version of the code!\n");	
+			exit(1);
+		}
+
 	if(Ncel % size == 0)
 		np = Ncel/size;
 	else
@@ -161,9 +154,21 @@ int main()
 			 {
 				r_out_p[i] = r_out[i+mynode*np]; 
 				r_in_p[i] = r_in[i+mynode*np];
-				area_out_p[i] =  M_PI * 0.04 * 0.04;  // diameter 0.08 m
-				area_in_p[i] =  M_PI * 0.04 * 0.04;
-				vol_p[i] =  M_PI * 0.04 * 0.04 * (r_out_p[i] - r_in_p[i]);
+
+				if (coord_sys == 1) // cartesian coord
+				{
+					area_out_p[i] =  1;  
+					area_in_p[i] =  1;
+					vol_p[i] =  1 * (r_out_p[i] - r_in_p[i]);
+				}
+
+				if (coord_sys == 2) // radial coord
+				{
+					area_out_p[i] =  M_PI * r_out_p[i] * r_out_p[i];  // diameter 0.08 m
+					area_in_p[i] =  M_PI * r_in_p[i] * r_in_p[i];
+					vol_p[i] =  M_PI * (r_out_p[i] * r_out_p[i] - r_in_p[i] * r_in_p[i]) * length;
+				}
+
 				vol_whole += vol_p[i];
 		       }
 
@@ -182,7 +187,6 @@ int main()
 
 	double bc_in_factor, bc_out_factor;
 	
-
 	diff_l = 0 * 2e-9 + 5 * por_v; 
 	mixf = disp_corr * diff_l * deltaT / pow((radius_out - radius_in) / Ncel, 2);
 	dMix = 1 + trunc(mixf * 3);
@@ -468,8 +472,6 @@ for (int m=1; m <= nMix; m++)  //advective time update
 
 							//		MPI_Sendrecv(r_out_p + 1, 1, MPI_DOUBLE, down_node, 33, r_in_p, 1, MPI_DOUBLE, down_node, 33, MPI_COMM_WORLD, &status);
 								}
-
-
 
 						} // end of dMix times of dispersion + reactin 
 		  // finish one step of advection + dMix dispersion
